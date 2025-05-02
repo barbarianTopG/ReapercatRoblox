@@ -56,12 +56,12 @@ local replicatedStorage = game:GetService("ReplicatedStorage")
 local textChatService = game:GetService("TextChatService")
 
 -- Detection
-replicatedStorage.Watchnoob.DetectionEvent.OnClientEvent:Connect(function(plr)
+replicatedStorage.Watchcat.DetectionEvent.OnClientEvent:Connect(function(plr)
 	textChatService.TextChannels.RBXGeneral:DisplaySystemMessage("[WATCHCAT CHEAT DETECTION] A player has been removed from your game for exploiting.")
 end)
 
 -- Flags
-replicatedStorage.Watchnoob.FlagEvent.OnClientEvent:Connect(function(plr: Player, detection)
+replicatedStorage.Watchcat.FlagEvent.OnClientEvent:Connect(function(plr: Player, detection)
 	textChatService.TextChannels.RBXGeneral:DisplaySystemMessage(plr.Name.." has flagged "..detection)
 end)
 ```
