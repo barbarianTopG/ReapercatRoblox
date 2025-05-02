@@ -288,7 +288,7 @@ Connections.new(playersService.PlayerAdded:Connect(function(plr)
 				local ping = plr:GetNetworkPing() * 2 * 1000
 				local pingBonus = -(1 * (ping / 500) - 1)
 				for i, check in config.Speed.Checks do
-					if check and getPlayerCheckException("UnAct", plr) <= 0 then
+					if check and getPlayerCheckException("Speed", plr) <= 0 then
 						if i == "B" then -- Velocity
 							local velo = math.max(hrp.Velocity.X, hrp.Velocity.Z) * 0.95
 							if velo > config.Speed.WalkSpeed + pingBonus + 1.7 then
