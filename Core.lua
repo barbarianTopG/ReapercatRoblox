@@ -13,11 +13,15 @@ shared.Watchcat = {
 		Teleport = function(plr: Player, pos: CFrame)
 			plr:SetAttribute("SpeedException", tick() + 1)
 			plr:SetAttribute("UnActException", tick() + 1)
+			plr:SetAttribute("NoclipException", tick() + 1)
 			task.wait()
 			plr.Character:PivotTo(pos)
 		end,
 		SetException = function(plr: Player, time: number)
 			plr:SetAttribute("Exception", tick() + time)
+		end,
+		SetMultiplier = function(plr: Player, time: number, multi) : ()
+			plr:SetAttribute('Multiplier', `{tick() + time}, {multi}`)
 		end,
 		SetCheckException = function(check: string, plr: Player, time: number)
 			plr:SetAttribute(check.."Exception", tick() + time)
@@ -33,16 +37,18 @@ shared.Watchcat = {
 			},
 			WalkSpeed = 16,
 			Velocity = 360,
-			CFrame = 17,
+			CFrame = 18,
 			Interval = 0.975,
 			MaxViolations = 100
 		},
 		Float = {
 			Checks = {
-				A = true -- Velocity
+				A = true, -- Velocity
+				B = true,
+				C = true
 			},
 			Velocity = 60,
-			Safety = 2,
+			Safety = 1.4,
 			MaxViolations = 50
 		},
 		UnexpectedActions = {
@@ -53,11 +59,22 @@ shared.Watchcat = {
 			},
 			MaxHeight = 10,
 			MaxVelocity = 60,
-			MaxCFrame = 25,
+			MaxCFrame = 40,
 			MaxViolations = 30
+		},
+		Noclip = {
+			Checks = {
+				A = true -- Raycast
+			},
+			Flag = false
 		}
 	}
 }
+
+local overlapParams = OverlapParams.new()
+overlapParams.FilterType = Enum.RaycastFilterType.Exclude
+overlapParams.MaxParts = 1
+overlapParams.CollisionGroup = 'Default'
 
 local function getConfiguration()
 	return shared.Watchcat.Config
@@ -78,6 +95,28 @@ function Connections.new(connection: RBXScriptConnection)
 	return conn
 end
 
+local function raycastAround(pos, params)
+	local result
+	
+	local res = 0
+	
+	for i = 1, 2 do
+		local ray = workspace:Raycast(pos, Vector3.new((i == 1 and 7 or 0), 0, (i == 2 and 7 or 0)), params)
+		if ray then
+			result = ray
+			res += 1
+		end
+	end
+	for i = 1, 2 do
+		local ray = workspace:Raycast(pos, Vector3.new((i == 1 and -7 or 0), 0, (i == 2 and -7 or 0)), params)
+		if ray then
+			result = ray
+			res += 1
+		end
+	end
+	return res >= 2 and result
+end
+
 local function getPlayerException(plr: Player)
 	if plr:GetAttribute("Exception") - tick() <= 0 then
 		return 0
@@ -90,6 +129,22 @@ local function getPlayerCheckException(check: string, plr: Player)
 		return 0
 	end
 	return plr:GetAttribute(check.."Exception") - tick()
+end
+
+local function getPlayerVeloMulti(plr: Player)
+	if plr.Character and plr.Character:FindFirstChildOfClass('Humanoid') and plr.Character.Humanoid.SeatPart then
+		if plr.Character.Humanoid.SeatPart:IsA('VehicleSeat') then
+			return {
+				Multiplier = 15,
+				ExtaFloatTime = math.huge
+			}
+		end
+	end
+	local data = plr:GetAttribute('Multiplier')
+	return data and tonumber(data:split(', ')[1]) > tick() and {
+		Multiplier = tonumber(data:split(', ')[2]),
+		ExtaFloatTime = 1
+	} or {Multiplier = 1, ExtaFloatTime = 0}
 end
 
 local function setPlayerException(plr: Player, time: number, add)
@@ -108,13 +163,13 @@ local function isOnGround(plr: Player)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = {char}
-	local rays = {}
+	local rays = {workspace:Raycast(hrp.Position, plr.Character.PrimaryPart.CFrame.LookVector, params)}
 	for i = 0, 5 do
 		table.insert(rays, workspace:Raycast(hrp.Position, Vector3.new(
 			i == 1 and 2 or i == 3 and -2 or 0,
-			-7,
+			-5,
 			i == 2 and 2 or i == 4 and -2 or 0
-		), params))
+			), params))
 	end
 	for i, v: RaycastResult in rays do
 		if v.Instance then
@@ -155,7 +210,9 @@ local function isInWater(plr: Player)
 	return false
 end
 
+local laddercache = {}
 local function isOnLadder(plr: Player)
+	if laddercache[plr] and laddercache[plr] > tick() then return true end
 	local char = plr.Character
 	if not char then return false end
 	local hum = char:FindFirstChildOfClass("Humanoid")
@@ -166,23 +223,26 @@ local function isOnLadder(plr: Player)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = {char}
-	local rays = {}
-	for i = 0, 5 do
+	local rays = {workspace:Raycast(hrp.Position, plr.Character.PrimaryPart.CFrame.LookVector, params)}
+	for i = 0, 7 do
 		table.insert(rays, workspace:Raycast(hrp.Position, Vector3.new(
 			i == 1 and 5 or i == 3 and -5 or 0,
-			0,
+			i == 5 and 5 or i == 6 and -5 or 0,
 			i == 2 and 5 or i == 4 and -5 or 0
 			), params))
 	end
-	
+
 	local isOnTruss
 	for i, v: RaycastResult in rays do
 		if v.Instance and v.Instance.ClassName == "TrussPart" then
+			warn('works!')
 			isOnTruss = true
+			laddercache[plr] = tick() + 0.5
+			break
 		end
 	end
 
-	return hum:GetState() == Enum.HumanoidStateType.Climbing and isOnTruss
+	return isOnTruss
 end
 
 Connections.new(remotes.Detection.OnServerEvent:Connect(function(plr, speed)
@@ -198,7 +258,7 @@ end))
 Connections.new(playersService.PlayerAdded:Connect(function(plr)
 	local charAddedConn
 	setPlayerException(plr, 0.05)
-	for i, v in {"Speed", "Float", "UnAct"} do
+	for i, v in {"Speed", "Float", "UnAct", "Noclip"} do
 		setPlayerCheckException(v, plr, 0.05)
 	end
 	charAddedConn = Connections.new(plr.CharacterAdded:Connect(function(char)
@@ -208,15 +268,17 @@ Connections.new(playersService.PlayerAdded:Connect(function(plr)
 			UnexpectedActions = 0
 		}
 		setPlayerException(plr, 0.05, true)
-		
+
 		if playersService:GetPlayerFromCharacter(char) == nil then charAddedConn:End() return end
 		local hum: Humanoid = char:WaitForChild("Humanoid")
 		local hrp: Part = char:WaitForChild("HumanoidRootPart")
-		
+
 		local lastCF = hrp.CFrame
+		local lastMovedir = hum.MoveDirection
 		local lastGroundCF = hrp.CFrame
 		local remainingAirTime = 0
 		local checksLoop
+		local insideapart
 		checksLoop = runService.Heartbeat:Connect(function(delta)
 			if playersService:GetPlayerFromCharacter(char) == nil or char == nil then checksLoop:Disconnect() end
 			if getPlayerException(plr) > 0 then
@@ -224,9 +286,9 @@ Connections.new(playersService.PlayerAdded:Connect(function(plr)
 			else
 				local config = getConfiguration()
 				if vl.Speed > config.Speed.MaxViolations or 
-						vl.Float > config.Float.MaxViolations or
-						vl.UnexpectedActions > config.UnexpectedActions.MaxViolations	
-						then
+					vl.Float > config.Float.MaxViolations or
+					vl.UnexpectedActions > config.UnexpectedActions.MaxViolations	
+				then
 					remotes.Detection:FireAllClients(plr)
 					if config.Kick then plr:Kick("\nWatchcat CHEAT DETECTION\n\nYou have been removed from the game due to continuos cheating and exploiting.") end
 					vl.Speed = -math.huge
@@ -235,29 +297,38 @@ Connections.new(playersService.PlayerAdded:Connect(function(plr)
 					plr.Character:BreakJoints()
 					return
 				end
-				
+
 				-- UNEXPECTED ACTIONS CHECKS
 				for i, check in config.UnexpectedActions.Checks do
 					if check and getPlayerCheckException("UnAct", plr) <= 0 then
 						if i == "A" then
 							if hrp.CFrame.Y - lastCF.Y > config.UnexpectedActions.MaxHeight then
 								vl.UnexpectedActions += 1 + math.random() * ((lastCF.Y - lastGroundCF.Y) / 3) + 1
-								hrp.CFrame = lastCF
 								remotes.Flag:FireAllClients(plr, "Unexpected Actions A ("..lastCF.Y - lastGroundCF.Y..")")
+								hrp.CFrame = lastCF
 								task.spawn(function()
-									hrp:SetNetworkOwner(nil)
-									task.wait(0.7)
+									if hrp:CanSetNetworkOwnership() then
+										hrp:SetNetworkOwner(nil)
+									end
+									hrp.CFrame = lastCF
+									hrp.AssemblyLinearVelocity = Vector3.zero
+									task.wait(1)
 									hrp:SetNetworkOwner(plr)
 								end)
 							end
+							
 						elseif i == "B" then
-							if hrp.Velocity.Y > config.UnexpectedActions.MaxVelocity then
-								vl.UnexpectedActions += 1 + math.random() * ((hrp.Velocity.Y) / 3) + 1
+							if hrp.AssemblyLinearVelocity.Y > (config.UnexpectedActions.MaxVelocity * getPlayerVeloMulti(plr).Multiplier) then
+								vl.UnexpectedActions += 1 + math.random() * ((hrp.AssemblyLinearVelocity.Y) / 3) + 1
+								remotes.Flag:FireAllClients(plr, "Unexpected Actions B ("..hrp.AssemblyLinearVelocity.Y..")")
 								hrp.CFrame = lastCF
-								remotes.Flag:FireAllClients(plr, "Unexpected Actions B ("..hrp.Velocity.Y..")")
 								task.spawn(function()
-									hrp:SetNetworkOwner(nil)
-									task.wait(0.7)
+									if hrp:CanSetNetworkOwnership() then
+										hrp:SetNetworkOwner(nil)
+									end
+									hrp.CFrame = lastCF
+									hrp.AssemblyLinearVelocity = Vector3.zero
+									task.wait(1)
 									hrp:SetNetworkOwner(plr)
 								end)
 							end
@@ -274,8 +345,12 @@ Connections.new(playersService.PlayerAdded:Connect(function(plr)
 									hrp.CFrame = lastCF
 									remotes.Flag:FireAllClients(plr, "Unexpected Actions C ("..sps..")")
 									task.spawn(function()
-										hrp:SetNetworkOwner(nil)
-										task.wait(0.7)
+										if hrp:CanSetNetworkOwnership() then
+											hrp:SetNetworkOwner(nil)
+										end
+										hrp.CFrame = lastCF
+										hrp.AssemblyLinearVelocity = Vector3.zero
+										task.wait(1)
 										hrp:SetNetworkOwner(plr)
 									end)
 								end
@@ -290,14 +365,20 @@ Connections.new(playersService.PlayerAdded:Connect(function(plr)
 				for i, check in config.Speed.Checks do
 					if check and getPlayerCheckException("Speed", plr) <= 0 then
 						if i == "B" then -- Velocity
-							local velo = math.max(hrp.Velocity.X, hrp.Velocity.Z) * 0.95
-							if velo > config.Speed.WalkSpeed + pingBonus + 1.7 then
+							local walking = isOnLadder(plr) and true or (hum.MoveDirection.Magnitude > 0.9 or lastMovedir.Magnitude > 0.9)
+							
+							local velo = math.max(hrp.AssemblyLinearVelocity.X, hrp.AssemblyLinearVelocity.Z) * (walking and (ping > 150 and 0.9 or 0.95) or (ping > 150 and 0.65 or 0.75))
+							if (velo + (isOnLadder(plr) and -20 or 0)) > (config.Speed.WalkSpeed * getPlayerVeloMulti(plr).Multiplier) + 1.7 then
 								vl.Speed += 1 + math.random() * ((velo - config.Speed.WalkSpeed + pingBonus) / 3) + 1
-								hrp.CFrame = lastCF
 								remotes.Flag:FireAllClients(plr, "Speed B ("..velo..")")
+								hrp.CFrame = lastCF
 								task.spawn(function()
-									hrp:SetNetworkOwner(nil)
-									task.wait(0.7)
+									if hrp:CanSetNetworkOwnership() then
+										hrp:SetNetworkOwner(nil)
+									end
+									hrp.CFrame = lastCF
+									hrp.AssemblyLinearVelocity = Vector3.zero
+									task.wait(1)
 									hrp:SetNetworkOwner(plr)
 								end)
 							end
@@ -308,14 +389,18 @@ Connections.new(playersService.PlayerAdded:Connect(function(plr)
 								task.wait(config.Speed.Interval)
 								if getPlayerException(plr) > 0 or getPlayerCheckException("Speed", plr) > 0 then return end
 								local newpos = Vector3.new(hrp.Position.X, 0, hrp.Position.Z)
-								sps = math.floor((newpos - Vector3.new(oldpos.X, 0, oldpos.Z)).magnitude)
-								if sps > config.Speed.CFrame + pingBonus then
+								sps = math.floor((newpos - (oldpos * Vector3.new(1, 0, 1))).magnitude)
+								if sps > (config.Speed.CFrame * getPlayerVeloMulti(plr).Multiplier) + pingBonus then
 									vl.Speed += 1 + math.random() * ((sps - config.Speed.WalkSpeed + pingBonus) / 3) + 1
-									hrp.CFrame = lastCF
 									remotes.Flag:FireAllClients(plr, "Speed C ("..sps..")")
+									hrp.CFrame = lastCF
 									task.spawn(function()
-										hrp:SetNetworkOwner(nil)
-										task.wait(0.7)
+										if hrp:CanSetNetworkOwnership() then
+											hrp:SetNetworkOwner(nil)
+										end
+										hrp.CFrame = lastCF
+										hrp.AssemblyLinearVelocity = Vector3.zero
+										task.wait(1)
 										hrp:SetNetworkOwner(plr)
 									end)
 								end
@@ -324,43 +409,109 @@ Connections.new(playersService.PlayerAdded:Connect(function(plr)
 					end
 				end
 
-				if (isOnGround(plr) or isInWater(plr) or isOnLadder(plr)) and hrp:GetNetworkOwner() == plr then
+				if (isOnGround(plr) or isInWater(plr) or isOnLadder(plr)) and hrp:GetNetworkOwner() == plr or ping > 1000 then
 					remainingAirTime = tick() + config.Float.Safety
 					lastGroundCF = hrp.CFrame
 				end
-
+							
 				-- FLOAT CHECKS
 				for i, check in config.Float.Checks do
 					if check and not isOnGround(plr) and not isInWater(plr) and not isOnLadder(plr) and getPlayerCheckException("Float", plr) <= 0 then
 						if i == "A" then
-							if remainingAirTime - tick() < 0.9 and (hrp.Velocity.Y >= -15 and hrp.Position.Y >= lastGroundCF.Y) then
-								vl.Float += 1 + math.random() * (hrp.Velocity.Y / 3) + 1
+							if remainingAirTime - tick() < config.Float.Safety / 2.222 and (hrp.AssemblyLinearVelocity.Y >= -15 and hrp.Position.Y >= lastGroundCF.Y) then
+								vl.Float += 1 + math.random() * (hrp.AssemblyLinearVelocity.Y / 3) + 1
+								remotes.Flag:FireAllClients(plr, "Float A ("..hrp.AssemblyLinearVelocity.Y..")")
 								hrp.CFrame = lastCF
-								remotes.Flag:FireAllClients(plr, "Float A ("..hrp.Velocity.Y..")")
 								task.spawn(function()
 									hrp:SetNetworkOwner(nil)
-									task.wait(0.7)
+									hrp.CFrame = lastCF
+									hrp.AssemblyLinearVelocity = Vector3.zero
+									task.wait(1)
 									hrp:SetNetworkOwner(plr)
 								end)
 								return
 							end
-							if remainingAirTime - tick() < 0.5 and hrp.Velocity.Y >= -config.Float.Velocity then
-								vl.Float += 1 + math.random() * (hrp.Velocity.Y / 3) + 1
+						elseif i == "B" then
+							if hrp and hrp.Parent and (remainingAirTime - tick()) < config.Float.Safety / 4 and hrp.AssemblyLinearVelocity.Y >= -config.Float.Velocity then
+								vl.Float += 1 + math.random() * (hrp.AssemblyLinearVelocity.Y / 3) + 1
+								remotes.Flag:FireAllClients(plr, "Float B ("..hrp.AssemblyLinearVelocity.Y..")")
 								hrp.CFrame = lastCF
-								remotes.Flag:FireAllClients(plr, "Float B ("..hrp.Velocity.Y..")")
 								task.spawn(function()
 									hrp:SetNetworkOwner(nil)
-									task.wait(0.7)
+									hrp.CFrame = lastCF
+									hrp.AssemblyLinearVelocity = Vector3.zero
+									task.wait(1)
 									hrp:SetNetworkOwner(plr)
 								end)
-								return
 							end
+						elseif i == "C" then
+							if hrp.AssemblyLinearVelocity.Y < 1 and (hrp.Position.Y - lastCF.Y) >= 5 and (remainingAirTime - tick()) < config.Float.Safety / 1.5 then
+								vl.Float += 1 + math.random() * (hrp.Position.Y - lastCF.Y) + 1
+								remotes.Flag:FireAllClients(plr, "Float C (Gain:"..(hrp.Position.Y - lastCF.Y)..", Air:"..(tick() - (remainingAirTime - config.Float.Safety))..")")
+								hrp.CFrame = lastCF
+								task.spawn(function()
+									hrp:SetNetworkOwner(nil)
+									hrp.CFrame = lastCF
+									hrp.AssemblyLinearVelocity = Vector3.zero
+									task.wait(1)
+									hrp:SetNetworkOwner(plr)
+								end)
+							end	
 						end
 					end
 				end
 
+				-- NOCLIP CHECKS
+				for i, check in config.Noclip.Checks do
+					if check and getPlayerCheckException("Noclip", plr) <= 0 then
+						if i == 'A' then
+							overlapParams.FilterDescendantsInstances = {workspace.Vehicles, hrp.Parent}
+
+							local radius = 0.1 
+							local parts = workspace:GetPartBoundsInRadius(hrp.Position, radius, overlapParams)
+
+							local isCurrentlyClipping = false
+							local clippingPart = nil
+							if #parts > 0 then
+								for _, part in parts do
+									if part and part:IsA("BasePart") and part.CanCollide then 
+										isCurrentlyClipping = true
+										clippingPart = part
+										break
+									end
+								end
+							end
+
+							if isCurrentlyClipping then
+								if not insideapart then
+									vl.Float += 1
+									remotes.Flag:FireAllClients(plr, "Noclip A ("..(clippingPart and clippingPart.Name or "UnknownPart")..")")
+									hrp.CFrame = lastCF 
+									task.spawn(function()
+										hrp:SetNetworkOwner(nil)
+										hrp.CFrame = lastCF
+										hrp.AssemblyLinearVelocity = Vector3.zero
+										task.wait(1)
+										hrp:SetNetworkOwner(plr) 
+									end)
+									insideapart = true
+									return
+								else
+									insideapart = true 
+								end
+
+							else
+								if insideapart then
+									insideapart = false
+								end
+							end
+						end
+					end
+				end
+				
+				lastMovedir = hum.MoveDirection
 				lastCF = hrp.CFrame
-			end
+			end	
 		end)
 	end))
 end))
