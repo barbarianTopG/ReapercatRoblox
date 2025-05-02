@@ -63,7 +63,7 @@ local function getConfiguration()
 	return shared.Watchcat.Config
 end
 
-local Connections = {}
+local Connections = {} -- why? don't ask
 function Connections.new(connection: RBXScriptConnection)
 	table.insert(Connections, connection)
 	local conn = {}
