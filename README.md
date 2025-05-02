@@ -11,14 +11,14 @@ This anti-chat includes:
 - CFrame Unexpected Action Checks
 
 - Easy way to teleport & do advanced movement without flagging the anti-cheat
-# How to install
+## How to install
 1. Make a new folder called "Watchcat" in ServerScriptService
 2. Made a new script called "Core"
 3. Copy "Core.lua" from this GitHub, and paste it into the script
 4. Make a new folder called "Watchcat" in ReplicatedStorage
 5. Add 2 new RemoteEvents inside that folder: FlagEvent, DetectionEvent
 ### NOTE: This part is for detecting WalkSpeed, there is 2 methods
-## Simple LocalScript
+### Simple LocalScript
 - This is the most detectable but easiest way to add the detection
 1. Make a new LocalScript in Workspace, ReplicatedStorage, StarterCharacterScripts or StarterPlayerScripts
 2. In that script, paste the following:
@@ -33,7 +33,7 @@ task.spawn(function()
 	end)
 end)
 ```
-## Hidden
+### Hidden
 - This is the least detectable, but harder way to add the detection
 1. Find a working LocalScript, and paste this where it will run upon the Character being created:
 ```lua
@@ -47,7 +47,7 @@ task.spawn(function()
 	end)
 end)
 ```
-# Flag & Detection Alerts
+## Flag & Detection Alerts
 Now that we have those RemoteEvents, we can put them to use. You can also add checks for the player if they are staff, or a different rank depending on your game.
 1. Create a LocalScript in PlayerScripts -> StarterPlayerScripts
 2. In that script, paste the following:
